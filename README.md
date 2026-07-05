@@ -1,2 +1,187 @@
-# Banahud
-Hxhdjf
+-- =============================================
+-- BLOX FRUIT MOBILE ULTIMATE - FULL SCRIPT
+-- SUPPORT: Delta X, VNG, Arceus X, Hydrogen, Vega X
+-- COPY AND PASTE DIRECTLY INTO EXECUTOR
+-- =============================================
+
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Camera = workspace.CurrentCamera
+
+-- ===== SETTINGS =====
+local Settings = {
+    FlySpeed = 60,
+    WalkSpeed = 90,
+    JumpPower = 90,
+    FarmRadius = 400,
+    AttackDelay = 0.2,
+    SeaBeastHeight = 30,
+    V4Delay = 3,
+    ChestDelay = 1.5,
+    BountyDelay = 0.3,
+    FruitDelay = 2,
+    LeviSearchInterval = 5
+}
+
+-- ===== STATE =====
+local State = {
+    ESP = false,
+    Fly = false,
+    Speed = false,
+    InfiniteJump = false,
+    NoClip = false,
+    AutoFarm = false,
+    AutoV4 = false,
+    FindLevi = false,
+    AutoSeaBeast = false,
+    AutoRaid = false,
+    AutoChest = false,
+    AutoBounty = false,
+    AutoFruit = false
+}
+
+local ESPObjects = {}
+local FlyBV = nil
+local FlyBG = nil
+local Threads = {}
+local Keybinds = {}
+
+-- ===== NOTIFICATION =====
+local function Notify(text, dur)
+    dur = dur or 3
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "⚡ BLOX FRUIT",
+            Text = tostring(text),
+            Duration = dur
+        })
+    end)
+end
+
+-- ===== TELEPORT =====
+local function Teleport(pos)
+    if Character and Character:FindFirstChild("HumanoidRootPart") then
+        Character.HumanoidRootPart.CFrame = CFrame.new(pos)
+        return true
+    end
+    return false
+end
+
+-- ===== FIRE CLICK =====
+local function FireClick(obj)
+    if obj and obj:IsA("ClickDetector") then
+        fireclickdetector(obj)
+        return true
+    end
+    return false
+end
+
+-- ===== GET NEAREST NPC =====
+local function GetNearestNPC(range, ignorePlayers)
+    local closest, dist = nil, range
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
+            if ignorePlayers and v.Name == Player.Name then continue end
+            if v.Humanoid.Health > 0 then
+                local mag = (v.HumanoidRootPart.Position - Character.HumanoidRootPart.Position).Magnitude
+                if mag < dist then
+                    closest, dist = v, mag
+                end
+            end
+        end
+    end
+    return closest, dist
+end
+
+-- ===== GET NEAREST PLAYER =====
+local function GetNearestPlayer(range)
+    local closest, dist = nil, range
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            local mag = (v.Character.HumanoidRootPart.Position - Character.HumanoidRootPart.Position).Magnitude
+            if mag < dist and v.Character.Humanoid.Health > 0 then
+                closest, dist = v.Character, mag
+            end
+        end
+    end
+    return closest, dist
+end
+
+-- ===== EQUIP BEST TOOL =====
+local function EquipBestTool(type)
+    local best = nil
+    local tools = {}
+    
+    for _, tool in pairs(Player.Backpack:GetChildren()) do
+        if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
+            table.insert(tools, tool)
+        end
+    end
+    
+    for _, tool in pairs(Character:GetChildren()) do
+        if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
+            table.insert(tools, tool)
+        end
+    end
+    
+    local patterns = {
+        sword = {"sword", "blade", "katana", "saber", "cutlass", "triple", "dark", "pole", "trident", "yoru", "shisui"},
+        fruit = {"fruit", "gomu", "mera", "pika", "sun", "dragon", "phoenix", "dark", "rumble", "venom", "dough", "soul", "leopard", "buddha"},
+        gun = {"gun", "pistol", "rifle", "cannon", "bazooka", "shotgun", "sniper"},
+        melee = {"superhuman", "death", "god", "electric", "shark", "gorilla"}
+    }
+    
+    for _, tool in pairs(tools) do
+        local name = string.lower(tool.Name)
+        for _, pattern in pairs(patterns[type] or {}) do
+            if string.find(name, pattern) then
+                if not best or tool.Name > best.Name then
+                    best = tool
+                end
+                break
+            end
+        end
+    end
+    
+    if best then
+        Humanoid:EquipTool(best)
+        return best
+    end
+    return nil
+end
+
+-- ===== ATTACK =====
+local function AttackTarget(target)
+    if not target or not target:FindFirstChild("HumanoidRootPart") or not target:FindFirstChild("Humanoid") or target.Humanoid.Health <= 0 then
+        return
+    end
+    
+    Teleport(target.HumanoidRootPart.Position + Vector3.new(0, 4, 0))
+    wait(0.05)
+    
+    local tool = EquipBestTool("sword") or EquipBestTool("fruit") or EquipBestTool("gun") or EquipBestTool("melee")
+    if tool then
+        for i = 1, 3 do
+            tool:Activate()
+            wait(Settings.AttackDelay)
+        end
+    end
+end
+
+-- ===== ESP =====
+local function CreateESP(part, color, text)
+    if not part or not part:IsA("BasePart") then return end
+    
+    local bill = Instance.new("BillboardGui")
+    bill.Name = "ESP_Mobile"
+    bill.Size = UDim2.new(0, 200, 0, 40)
+    bill.AlwaysOnTop = true
+    bill.Adornee =
+    
+  
