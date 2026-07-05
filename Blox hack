@@ -1,0 +1,701 @@
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Camera = workspace.CurrentCamera
+
+local Settings = {
+    FlySpeed = 60,
+    WalkSpeed = 90,
+    JumpPower = 90,
+    FarmRadius = 400,
+    AttackDelay = 0.2,
+    SeaBeastHeight = 30,
+    V4Delay = 3,
+    ChestDelay = 1.5,
+    BountyDelay = 0.3,
+    FruitDelay = 2,
+    LeviSearchInterval = 5
+}
+
+local State = {
+    ESP = false,
+    Fly = false,
+    Speed = false,
+    InfiniteJump = false,
+    NoClip = false,
+    AutoFarm = false,
+    AutoV4 = false,
+    FindLevi = false,
+    AutoSeaBeast = false,
+    AutoRaid = false,
+    AutoChest = false,
+    AutoBounty = false,
+    AutoFruit = false
+}
+
+local ESPObjects = {}
+local FlyBV = nil
+local FlyBG = nil
+local Threads = {}
+local Keybinds = {}
+
+local function Notify(text, dur)
+    dur = dur or 3
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "BLOX FRUIT",
+            Text = tostring(text),
+            Duration = dur
+        })
+    end)
+end
+
+local function Teleport(pos)
+    if Character and Character:FindFirstChild("HumanoidRootPart") then
+        Character.HumanoidRootPart.CFrame = CFrame.new(pos)
+        return true
+    end
+    return false
+end
+
+local function FireClick(obj)
+    if obj and obj:IsA("ClickDetector") then
+        fireclickdetector(obj)
+        return true
+    end
+    return false
+end
+
+local function GetNearestNPC(range, ignorePlayers)
+    local closest, dist = nil, range
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
+            if ignorePlayers and v.Name == Player.Name then continue end
+            if v.Humanoid.Health > 0 then
+                local mag = (v.HumanoidRootPart.Position - Character.HumanoidRootPart.Position).Magnitude
+                if mag < dist then
+                    closest, dist = v, mag
+                end
+            end
+        end
+    end
+    return closest, dist
+end
+
+local function GetNearestPlayer(range)
+    local closest, dist = nil, range
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            local mag = (v.Character.HumanoidRootPart.Position - Character.HumanoidRootPart.Position).Magnitude
+            if mag < dist and v.Character.Humanoid.Health > 0 then
+                closest, dist = v.Character, mag
+            end
+        end
+    end
+    return closest, dist
+end
+
+local function EquipBestTool(type)
+    local best = nil
+    local tools = {}
+    
+    for _, tool in pairs(Player.Backpack:GetChildren()) do
+        if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
+            table.insert(tools, tool)
+        end
+    end
+    
+    for _, tool in pairs(Character:GetChildren()) do
+        if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
+            table.insert(tools, tool)
+        end
+    end
+    
+    local patterns = {
+        sword = {"sword", "blade", "katana", "saber", "cutlass", "triple", "dark", "pole", "trident", "yoru", "shisui"},
+        fruit = {"fruit", "gomu", "mera", "pika", "sun", "dragon", "phoenix", "dark", "rumble", "venom", "dough", "soul", "leopard", "buddha"},
+        gun = {"gun", "pistol", "rifle", "cannon", "bazooka", "shotgun", "sniper"},
+        melee = {"superhuman", "death", "god", "electric", "shark", "gorilla"}
+    }
+    
+    for _, tool in pairs(tools) do
+        local name = string.lower(tool.Name)
+        for _, pattern in pairs(patterns[type] or {}) do
+            if string.find(name, pattern) then
+                if not best or tool.Name > best.Name then
+                    best = tool
+                end
+                break
+            end
+        end
+    end
+    
+    if best then
+        Humanoid:EquipTool(best)
+        return best
+    end
+    return nil
+end
+
+local function AttackTarget(target)
+    if not target or not target:FindFirstChild("HumanoidRootPart") or not target:FindFirstChild("Humanoid") or target.Humanoid.Health <= 0 then
+        return
+    end
+    
+    Teleport(target.HumanoidRootPart.Position + Vector3.new(0, 4, 0))
+    wait(0.05)
+    
+    local tool = EquipBestTool("sword") or EquipBestTool("fruit") or EquipBestTool("gun") or EquipBestTool("melee")
+    if tool then
+        for i = 1, 3 do
+            tool:Activate()
+            wait(Settings.AttackDelay)
+        end
+    end
+end
+
+local function CreateESP(part, color, text)
+    if not part or not part:IsA("BasePart") then return end
+    
+    local bill = Instance.new("BillboardGui")
+    bill.Name = "ESP_Mobile"
+    bill.Size = UDim2.new(0, 200, 0, 40)
+    bill.AlwaysOnTop = true
+    bill.Adornee = part
+    
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(1, 0, 1, 0)
+    bg.BackgroundColor3 = Color3.new(0, 0, 0)
+    bg.BackgroundTransparency = 0.4
+    bg.Parent = bill
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = color or Color3.new(1, 0, 0)
+    label.TextStrokeTransparency = 0.3
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamBold
+    label.Text = text or "Unknown"
+    label.Parent = bill
+    
+    bill.Parent = part
+    table.insert(ESPObjects, bill)
+    return bill
+end
+
+local function ClearESP()
+    for _, obj in pairs(ESPObjects) do
+        pcall(function() obj:Destroy() end)
+    end
+    ESPObjects = {}
+end
+
+local function ToggleESP(state)
+    State.ESP = state
+    if state then
+        ClearESP()
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") then
+                if v.Name ~= Player.Name and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+                    local color = Color3.new(1, 0, 0)
+                    if string.find(string.lower(v.Name), "boss") then color = Color3.new(1, 0.5, 0) end
+                    if string.find(string.lower(v.Name), "dragon") then color = Color3.new(1, 0.2, 0.8) end
+                    if string.find(string.lower(v.Name), "levi") then color = Color3.new(0, 1, 1) end
+                    CreateESP(v.HumanoidRootPart, color, v.Name .. " HP" .. math.floor(v.Humanoid.Health))
+                end
+                if string.find(string.lower(v.Name), "chest") then
+                    CreateESP(v.HumanoidRootPart, Color3.new(1, 1, 0), "CHEST")
+                end
+                if string.find(string.lower(v.Name), "fruit") then
+                    CreateESP(v.HumanoidRootPart, Color3.new(0.5, 0, 1), "FRUIT")
+                end
+            end
+        end
+    else
+        ClearESP()
+    end
+end
+
+local function ToggleFly(state)
+    State.Fly = state
+    if state then
+        if FlyBV then FlyBV:Destroy() end
+        if FlyBG then FlyBG:Destroy() end
+        
+        FlyBV = Instance.new("BodyVelocity")
+        FlyBV.MaxForce = Vector3.new(4000, 4000, 4000)
+        FlyBV.Velocity = Vector3.new(0, Settings.FlySpeed, 0)
+        FlyBV.Parent = Character.HumanoidRootPart
+        
+        FlyBG = Instance.new("BodyGyro")
+        FlyBG.MaxTorque = Vector3.new(4000, 4000, 4000)
+        FlyBG.P = 5000
+        FlyBG.CFrame = Character.HumanoidRootPart.CFrame
+        FlyBG.Parent = Character.HumanoidRootPart
+    else
+        if FlyBV then FlyBV:Destroy(); FlyBV = nil end
+        if FlyBG then FlyBG:Destroy(); FlyBG = nil end
+    end
+end
+
+local function ToggleSpeed(state)
+    State.Speed = state
+    if state then
+        Humanoid.WalkSpeed = Settings.WalkSpeed
+        Humanoid.JumpPower = Settings.JumpPower
+    else
+        Humanoid.WalkSpeed = 16
+        Humanoid.JumpPower = 50
+    end
+end
+
+local function ToggleInfiniteJump(state)
+    State.InfiniteJump = state
+end
+
+local function ToggleNoClip(state)
+    State.NoClip = state
+    for _, v in pairs(Character:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.CanCollide = not state
+        end
+    end
+end
+
+local function StartAutoFarm()
+    if State.AutoFarm then return end
+    State.AutoFarm = true
+    Notify("Auto Farm Started")
+    
+    Threads.AutoFarm = task.spawn(function()
+        while State.AutoFarm do
+            local target = GetNearestNPC(Settings.FarmRadius, true)
+            if target then
+                AttackTarget(target)
+            end
+            wait(0.3)
+        end
+    end)
+end
+
+local function StartAutoV4()
+    if State.AutoV4 then return end
+    State.AutoV4 = true
+    Notify("Auto V4 Started")
+    
+    Threads.AutoV4 = task.spawn(function()
+        while State.AutoV4 do
+            local npc = workspace:FindFirstChild("AwekeningNPC") or workspace:FindFirstChild("RaceNPC") or workspace:FindFirstChild("V4NPC")
+            if npc and npc:FindFirstChild("HumanoidRootPart") then
+                Teleport(npc.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
+                wait(0.3)
+                FireClick(npc:FindFirstChildOfClass("ClickDetector"))
+                for _, v in pairs(npc:GetDescendants()) do
+                    if v:IsA("ClickDetector") then FireClick(v) end
+                end
+            end
+            
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("Model") and (string.find(string.lower(v.Name), "v4") or string.find(string.lower(v.Name), "awaken") or string.find(string.lower(v.Name), "race")) then
+                    if v:FindFirstChild("HumanoidRootPart") then
+                        Teleport(v.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
+                        wait(0.2)
+                        FireClick(v:FindFirstChildOfClass("ClickDetector"))
+                        for _, child in pairs(v:GetDescendants()) do
+                            if child:IsA("ClickDetector") then FireClick(child) end
+                        end
+                    end
+                end
+            end
+            wait(Settings.V4Delay)
+        end
+    end)
+end
+
+local function StartFindLevi()
+    if State.FindLevi then return end
+    State.FindLevi = true
+    Notify("Searching Leviathan")
+    
+    Threads.FindLevi = task.spawn(function()
+        while State.FindLevi do
+            local found = false
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("Model") and (string.find(string.lower(v.Name), "levi") or string.find(string.lower(v.Name), "leviathan")) then
+                    if v:FindFirstChild("HumanoidRootPart") then
+                        Teleport(v.HumanoidRootPart.Position + Vector3.new(0, 10, 0))
+                        Notify("Leviathan Found!", 5)
+                        found = true
+                        break
+                    end
+                end
+            end
+            
+            if not found then
+                local boat = workspace:FindFirstChild("Boat") or workspace:FindFirstChild("Ship") or workspace:FindFirstChild("SeaBoat")
+                if boat and boat:FindFirstChild("HumanoidRootPart") then
+                    Teleport(boat.HumanoidRootPart.Position + Vector3.new(0, 5, 0))
+                end
+                wait(Settings.LeviSearchInterval)
+            else
+                wait(30)
+            end
+        end
+    end)
+end
+
+local function StartAutoSeaBeast()
+    if State.AutoSeaBeast then return end
+    State.AutoSeaBeast = true
+    Notify("Auto Sea Beast Started")
+    
+    Threads.AutoSeaBeast = task.spawn(function()
+        while State.AutoSeaBeast do
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("Model") and (string.find(string.lower(v.Name), "seabeast") or string.find(string.lower(v.Name), "sea beast") or string.find(string.lower(v.Name), "kraken")) then
+                    if v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 and v:FindFirstChild("HumanoidRootPart") then
+                        Teleport(v.HumanoidRootPart.Position + Vector3.new(0, Settings.SeaBeastHeight, 0))
+                        local tool = EquipBestTool("fruit") or EquipBestTool("sword") or EquipBestTool("gun")
+                        if tool then
+                            for i = 1, 4 do
+                                tool:Activate()
+                                wait(0.25)
+                            end
+                        end
+                    end
+                end
+            end
+            wait(0.8)
+        end
+    end)
+end
+
+local function StartAutoRaid()
+    if State.AutoRaid then return end
+    State.AutoRaid = true
+    Notify("Auto Raid Started")
+    
+    Threads.AutoRaid = task.spawn(function()
+        while State.AutoRaid do
+            local npc = workspace:FindFirstChild("RaidNPC") or workspace:FindFirstChild("Raid")
+            if npc and npc:FindFirstChild("HumanoidRootPart") then
+                Teleport(npc.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
+                wait(0.3)
+                FireClick(npc:FindFirstChildOfClass("ClickDetector"))
+                for _, v in pairs(npc:GetDescendants()) do
+                    if v:IsA("ClickDetector") then FireClick(v) end
+                end
+            end
+            
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("Model") and string.find(string.lower(v.Name), "chest") and v:FindFirstChild("HumanoidRootPart") then
+                    Teleport(v.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
+                    wait(0.2)
+                    FireClick(v:FindFirstChildOfClass("ClickDetector"))
+                end
+            end
+            wait(4)
+        end
+    end)
+end
+
+local function StartAutoChest()
+    if State.AutoChest then return end
+    State.AutoChest = true
+    Notify("Auto Chest Started")
+    
+    Threads.AutoChest = task.spawn(function()
+        while State.AutoChest do
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("Model") and (string.find(string.lower(v.Name), "chest") or string.find(string.lower(v.Name), "box") or string.find(string.lower(v.Name), "crate")) then
+                    if v:FindFirstChild("HumanoidRootPart") then
+                        Teleport(v.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
+                        wait(0.15)
+                        FireClick(v:FindFirstChildOfClass("ClickDetector"))
+                        for _, child in pairs(v:GetDescendants()) do
+                            if child:IsA("ClickDetector") then FireClick(child) end
+                        end
+                    end
+                end
+            end
+            wait(Settings.ChestDelay)
+        end
+    end)
+end
+
+local function StartAutoBounty()
+    if State.AutoBounty then return end
+    State.AutoBounty = true
+    Notify("Auto Bounty Started")
+    
+    Threads.AutoBounty = task.spawn(function()
+        while State.AutoBounty do
+            local target = GetNearestPlayer(500)
+            if target then
+                AttackTarget(target)
+            else
+                local npc = GetNearestNPC(300, true)
+                if npc then AttackTarget(npc) end
+            end
+            wait(Settings.BountyDelay)
+        end
+    end)
+end
+
+local function StartAutoFruit()
+    if State.AutoFruit then return end
+    State.AutoFruit = true
+    Notify("Auto Fruit Started")
+    
+    Threads.AutoFruit = task.spawn(function()
+        while State.AutoFruit do
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("Model") and string.find(string.lower(v.Name), "fruit") then
+                    local root = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Handle") or v:FindFirstChildWhichIsA("BasePart")
+                    if root then
+                        Teleport(root.Position + Vector3.new(0, 2, 0))
+                        wait(0.3)
+                        local click = v:FindFirstChildOfClass("ClickDetector")
+                        if click then FireClick(click) end
+                    end
+                end
+            end
+            wait(Settings.FruitDelay)
+        end
+    end)
+end
+
+local Locations = {
+    {"Marine", Vector3.new(-1200, 15, 2400)},
+    {"Pirate", Vector3.new(1200, 15, -2400)},
+    {"Jungle", Vector3.new(-500, 20, -500)},
+    {"Desert", Vector3.new(1500, 20, 1500)},
+    {"Snow", Vector3.new(-2000, 20, -2000)},
+    {"Kingdom S2", Vector3.new(0, 100, 0)},
+    {"Castle S2", Vector3.new(500, 50, 500)},
+    {"Elite S3", Vector3.new(-500, 30, -1500)},
+    {"Floating S3", Vector3.new(1500, 300, 0)},
+    {"Dragon", Vector3.new(-2000, 50, 2000)},
+    {"Ice", Vector3.new(2500, 20, -2500)},
+    {"Dark Arena", Vector3.new(0, 0, 3000)},
+    {"Volcano", Vector3.new(-1500, 50, -1500)},
+    {"Graveyard", Vector3.new(800, 20, -800)}
+}
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = Player:WaitForChild("PlayerGui")
+ScreenGui.Name = "BloxFruitMobile"
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 380, 0, 550)
+MainFrame.Position = UDim2.new(0.5, -190, 0.5, -275)
+MainFrame.BackgroundColor3 = Color3.new(0.05, 0.05, 0.1)
+MainFrame.BackgroundTransparency = 0.15
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = ScreenGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 10)
+Corner.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 45)
+Title.Text = "BLOX FRUIT MOBILE"
+Title.TextColor3 = Color3.new(1, 0.7, 0.1)
+Title.BackgroundTransparency = 1
+Title.TextScaled = true
+Title.Font = Enum.Font.GothamBold
+Title.Parent = MainFrame
+
+local SubTitle = Instance.new("TextLabel")
+SubTitle.Size = UDim2.new(1, 0, 0, 20)
+SubTitle.Position = UDim2.new(0, 0, 0, 40)
+SubTitle.Text = "Full Features | Delta/VNG/Arceus"
+SubTitle.TextColor3 = Color3.new(0.5, 0.5, 0.5)
+SubTitle.BackgroundTransparency = 1
+SubTitle.TextScaled = true
+SubTitle.Font = Enum.Font.Gotham
+SubTitle.Parent = MainFrame
+
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Size = UDim2.new(1, -10, 1, -105)
+ScrollFrame.Position = UDim2.new(0, 5, 0, 100)
+ScrollFrame.BackgroundTransparency = 1
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1100)
+ScrollFrame.ScrollBarThickness = 3
+ScrollFrame.Parent = MainFrame
+
+local UIList = Instance.new("UIListLayout")
+UIList.Padding = UDim.new(0, 4)
+UIList.SortOrder = Enum.SortOrder.LayoutOrder
+UIList.Parent = ScrollFrame
+
+local function CreateButton(text, cb)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 38)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.BackgroundColor3 = Color3.new(0.15, 0.15, 0.25)
+    btn.BorderSizePixel = 0
+    btn.TextScaled = true
+    btn.Font = Enum.Font.Gotham
+    btn.Parent = ScrollFrame
+    
+    local cr = Instance.new("UICorner")
+    cr.CornerRadius = UDim.new(0, 5)
+    cr.Parent = btn
+    
+    btn.MouseButton1Click:Connect(cb)
+    return btn
+end
+
+local function CreateToggle(text, stateVar, cb)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, -10, 0, 38)
+    frame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.2)
+    frame.BorderSizePixel = 0
+    frame.Parent = ScrollFrame
+    
+    local cr = Instance.new("UICorner")
+    cr.CornerRadius = UDim.new(0, 5)
+    cr.Parent = frame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.65, 0, 1, 0)
+    label.Text = text
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.BackgroundTransparency = 1
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextScaled = true
+    label.Font = Enum.Font.Gotham
+    label.Parent = frame
+    
+    local toggle = Instance.new("TextButton")
+    toggle.Size = UDim2.new(0.3, 0, 0.8, 0)
+    toggle.Position = UDim2.new(0.7, 0, 0.1, 0)
+    toggle.Text = "OFF"
+    toggle.TextColor3 = Color3.new(1, 0.3, 0.3)
+    toggle.BackgroundColor3 = Color3.new(0.2, 0.2, 0.3)
+    toggle.BorderSizePixel = 0
+    toggle.TextScaled = true
+    toggle.Font = Enum.Font.GothamBold
+    toggle.Parent = frame
+    
+    local cr2 = Instance.new("UICorner")
+    cr2.CornerRadius = UDim.new(0, 5)
+    cr2.Parent = toggle
+    
+    toggle.MouseButton1Click:Connect(function()
+        stateVar = not stateVar
+        toggle.Text = stateVar and "ON" or "OFF"
+        toggle.TextColor3 = stateVar and Color3.new(0.2, 0.8, 0.2) or Color3.new(1, 0.3, 0.3)
+        cb(stateVar)
+    end)
+    return toggle
+end
+
+CreateButton("Refresh", function() Player:LoadCharacter(); Notify("Refreshed") end)
+CreateButton("Rejoin", function() game:GetService("TeleportService"):Teleport(game.PlaceId, Player) end)
+
+CreateToggle("ESP", State.ESP, function(v) ToggleESP(v) end)
+CreateToggle("Fly", State.Fly, function(v) ToggleFly(v) end)
+CreateToggle("Speed", State.Speed, function(v) ToggleSpeed(v) end)
+CreateToggle("Infinite Jump", State.InfiniteJump, function(v) ToggleInfiniteJump(v) end)
+CreateToggle("No Clip", State.NoClip, function(v) ToggleNoClip(v) end)
+
+CreateToggle("Auto Farm", State.AutoFarm, function(v)
+    if v then StartAutoFarm() else State.AutoFarm = false; Notify("Farm Stopped") end
+end)
+
+CreateToggle("Auto V4", State.AutoV4, function(v)
+    if v then StartAutoV4() else State.AutoV4 = false; Notify("V4 Stopped") end
+end)
+
+CreateToggle("Find Leviathan", State.FindLevi, function(v)
+    if v then StartFindLevi() else State.FindLevi = false; Notify("Levi Search Stopped") end
+end)
+
+CreateToggle("Auto Sea Beast", State.AutoSeaBeast, function(v)
+    if v then StartAutoSeaBeast() else State.AutoSeaBeast = false; Notify("Sea Beast Stopped") end
+end)
+
+CreateToggle("Auto Raid", State.AutoRaid, function(v)
+    if v then StartAutoRaid() else State.AutoRaid = false; Notify("Raid Stopped") end
+end)
+
+CreateToggle("Auto Chest", State.AutoChest, function(v)
+    if v then StartAutoChest() else State.AutoChest = false; Notify("Chest Stopped") end
+end)
+
+CreateToggle("Auto Bounty", State.AutoBounty, function(v)
+    if v then StartAutoBounty() else State.AutoBounty = false; Notify("Bounty Stopped") end
+end)
+
+CreateToggle("Auto Fruit", State.AutoFruit, function(v)
+    if v then StartAutoFruit() else State.AutoFruit = false; Notify("Fruit Stopped") end
+end)
+
+local TeleLabel = Instance.new("TextLabel")
+TeleLabel.Size = UDim2.new(1, -10, 0, 25)
+TeleLabel.Text = "TELEPORT"
+TeleLabel.TextColor3 = Color3.new(0.5, 0.5, 1)
+TeleLabel.BackgroundTransparency = 1
+TeleLabel.TextScaled = true
+TeleLabel.Font = Enum.Font.GothamBold
+TeleLabel.Parent = ScrollFrame
+
+for _, loc in pairs(Locations) do
+    CreateButton("TP " .. loc[1], function()
+        Teleport(loc[2])
+        Notify("TP to " .. loc[1])
+    end)
+end
+
+CreateButton("Custom TP", function()
+    local x = tonumber(game:GetService("StarterGui"):SetCore("Prompt", {Title = "X", Text = "Enter X"})) or 0
+    local y = tonumber(game:GetService("StarterGui"):SetCore("Prompt", {Title = "Y", Text = "Enter Y"})) or 0
+    local z = tonumber(game:GetService("StarterGui"):SetCore("Prompt", {Title = "Z", Text = "Enter Z"})) or 0
+    Teleport(Vector3.new(x, y, z))
+    Notify("TP to custom position")
+end)
+
+CreateButton("Set GUI Keybind", function()
+    local key = UserInputService:GetLastInput().KeyCode.Name
+    Keybinds[key] = function()
+        MainFrame.Visible = not MainFrame.Visible
+    end
+    Notify("Keybind set to " .. key)
+end)
+
+CreateButton("Hide GUI", function()
+    MainFrame.Visible = false
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    local key = input.KeyCode.Name
+    for k, fn in pairs(Keybinds) do
+        if k == key then fn() end
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    if State.InfiniteJump and Humanoid then
+        Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if State.ESP and #ESPObjects < 5 then
+        ToggleESP(true)
+    end
+end)
+
+Notify("Blox Fruit Mobile Loaded!", 4)
+print("[BLOX FRUIT MOBILE] Loaded successfully!")
