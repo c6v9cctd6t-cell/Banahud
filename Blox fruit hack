@@ -1,6 +1,6 @@
 
 -- =============================================
--- BLOX FRUIT BANANA MENU V2 - ULTIMATE MOBILE
+-- BLOX FRUIT BANANA MENU V3 - FIXED
 -- SUPPORT: Delta X, VNG, Arceus X, Hydrogen, Vega X
 -- =============================================
 
@@ -19,16 +19,15 @@ local Settings = {
     FlySpeed = 60,
     WalkSpeed = 90,
     JumpPower = 90,
-    FarmRadius = 400,
-    AttackDelay = 0.2,
+    FarmRadius = 800,
+    AttackDelay = 0.15,
     SeaBeastHeight = 30,
     V4Delay = 3,
     ChestDelay = 1.5,
     BountyDelay = 0.3,
     FruitDelay = 2,
     LeviSearchInterval = 5,
-    AutoHideDelay = 10,
-    FloatingButtonSize = 50
+    KillAuraRadius = 50
 }
 
 -- ===== STATE =====
@@ -50,31 +49,16 @@ local State = {
     AutoAwaken = false,
     AutoQuest = false,
     AutoCollect = false,
-    AutoHatch = false,
-    AutoFishing = false,
     AutoBoss = false,
-    AutoElite = false,
-    AutoParty = false,
-    AutoTrade = false,
-    AutoStock = false,
     AutoMastery = false,
-    AutoBeli = false,
-    AutoFragments = false,
-    AutoLevel = false,
-    AutoStats = false,
-    AutoBuff = false,
     AutoHeal = false,
     AutoRejoin = false,
     AntiStun = false,
-    AntiBan = false,
     AntiAFK = false,
-    AntiLag = false,
     WaterWalk = false,
     NoFall = false,
     KillAura = false,
-    Aimbot = false,
-    MenuVisible = true,
-    FloatingButton = true
+    MenuVisible = true
 }
 
 local ESPObjects = {}
@@ -82,18 +66,37 @@ local FlyBV = nil
 local FlyBG = nil
 local Threads = {}
 local Keybinds = {}
-local MenuVisible = true
-local FloatingButton = nil
 local Dragging = false
 local DragStart = nil
 local DragOffset = nil
+
+-- ===== GET LEVEL & BELI =====
+local function GetLevel()
+    local level = 0
+    if Player:FindFirstChild("Data") and Player.Data:FindFirstChild("Level") then
+        level = Player.Data.Level.Value
+    elseif Player:FindFirstChild("leaderstats") and Player.leaderstats:FindFirstChild("Level") then
+        level = Player.leaderstats.Level.Value
+    end
+    return level
+end
+
+local function GetBeli()
+    local beli = 0
+    if Player:FindFirstChild("leaderstats") and Player.leaderstats:FindFirstChild("Beli") then
+        beli = Player.leaderstats.Beli.Value
+    elseif Player:FindFirstChild("Data") and Player.Data:FindFirstChild("Beli") then
+        beli = Player.Data.Beli.Value
+    end
+    return beli
+end
 
 -- ===== NOTIFICATION =====
 local function Notify(text, dur)
     dur = dur or 3
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "🍌 BANANA MENU",
+            Title = "🍌 BANANA",
             Text = tostring(text),
             Duration = dur
         })
@@ -168,10 +171,10 @@ local function EquipBestTool(type)
     end
     
     local patterns = {
-        sword = {"sword", "blade", "katana", "saber", "cutlass", "triple", "dark", "pole", "trident", "yoru", "shisui"},
-        fruit = {"fruit", "gomu", "mera", "pika", "sun", "dragon", "phoenix", "dark", "rumble", "venom", "dough", "soul", "leopard", "buddha"},
-        gun = {"gun", "pistol", "rifle", "cannon", "bazooka", "shotgun", "sniper"},
-        melee = {"superhuman", "death", "god", "electric", "shark", "gorilla"}
+        sword = {"sword", "blade", "katana", "saber", "cutlass", "triple", "dark", "pole", "trident", "yoru", "shisui", "koko", "canv", "gravity", "soul", "cane", "dual", "true", "bisento", "long", "pipe", "slayer", "shark"},
+        fruit = {"fruit", "gomu", "mera", "pika", "sun", "dragon", "phoenix", "dark", "rumble", "venom", "dough", "soul", "leopard", "buddha", "quake", "light", "ice", "fire", "flame", "shadow", "spirit", "control", "string", "barrier", "paw"},
+        gun = {"gun", "pistol", "rifle", "cannon", "bazooka", "shotgun", "sniper", "musket", "blunder", "revolver"},
+        melee = {"superhuman", "death", "god", "electric", "shark", "gorilla", "black", "dragon", "combat", "water", "snake"}
     }
     
     for _, tool in pairs(tools) do
@@ -196,7 +199,7 @@ end
 -- ===== ATTACK =====
 local function AttackTarget(target)
     if not target or not target:FindFirstChild("HumanoidRootPart") or not target:FindFirstChild("Humanoid") or target.Humanoid.Health <= 0 then
-        return
+        return false
     end
     
     Teleport(target.HumanoidRootPart.Position + Vector3.new(0, 4, 0))
@@ -208,7 +211,28 @@ local function AttackTarget(target)
             tool:Activate()
             wait(Settings.AttackDelay)
         end
+        return true
     end
+    return false
+end
+
+-- ===== FIXED AUTO FARM =====
+local function StartAutoFarm()
+    if State.AutoFarm then return end
+    State.AutoFarm = true
+    Notify("⚔️ Auto Farm Started")
+    
+    Threads.AutoFarm = task.spawn(function()
+        while State.AutoFarm do
+            local target, dist = GetNearestNPC(Settings.FarmRadius, true)
+            if target then
+                AttackTarget(target)
+            else
+                wait(1)
+            end
+            wait(0.3)
+        end
+    end)
 end
 
 -- ===== ESP =====
@@ -260,17 +284,13 @@ local function ToggleESP(state)
                     if string.find(string.lower(v.Name), "boss") then color = Color3.new(1, 0.5, 0) end
                     if string.find(string.lower(v.Name), "dragon") then color = Color3.new(1, 0.2, 0.8) end
                     if string.find(string.lower(v.Name), "levi") then color = Color3.new(0, 1, 1) end
-                    if string.find(string.lower(v.Name), "elite") then color = Color3.new(0.5, 0, 1) end
                     CreateESP(v.HumanoidRootPart, color, v.Name .. " HP" .. math.floor(v.Humanoid.Health))
                 end
                 if string.find(string.lower(v.Name), "chest") then
-                    CreateESP(v.HumanoidRootPart, Color3.new(1, 1, 0), "📦 CHEST")
+                    CreateESP(v.HumanoidRootPart, Color3.new(1, 1, 0), "CHEST")
                 end
                 if string.find(string.lower(v.Name), "fruit") then
-                    CreateESP(v.HumanoidRootPart, Color3.new(0.5, 0, 1), "🍎 FRUIT")
-                end
-                if string.find(string.lower(v.Name), "factory") then
-                    CreateESP(v.HumanoidRootPart, Color3.new(1, 0.5, 0.5), "🏭 FACTORY")
+                    CreateESP(v.HumanoidRootPart, Color3.new(0.5, 0, 1), "FRUIT")
                 end
             end
         end
@@ -334,28 +354,12 @@ local function ToggleWaterWalk(state)
     State.WaterWalk = state
 end
 
--- ===== NO FALL DAMAGE =====
+-- ===== NO FALL =====
 local function ToggleNoFall(state)
     State.NoFall = state
 end
 
 -- ===== AUTO FUNCTIONS =====
-local function StartAutoFarm()
-    if State.AutoFarm then return end
-    State.AutoFarm = true
-    Notify("⚔️ Auto Farm Started")
-    
-    Threads.AutoFarm = task.spawn(function()
-        while State.AutoFarm do
-            local target = GetNearestNPC(Settings.FarmRadius, true)
-            if target then
-                AttackTarget(target)
-            end
-            wait(0.3)
-        end
-    end)
-end
-
 local function StartAutoV4()
     if State.AutoV4 then return end
     State.AutoV4 = true
@@ -370,19 +374,6 @@ local function StartAutoV4()
                 FireClick(npc:FindFirstChildOfClass("ClickDetector"))
                 for _, v in pairs(npc:GetDescendants()) do
                     if v:IsA("ClickDetector") then FireClick(v) end
-                end
-            end
-            
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v:IsA("Model") and (string.find(string.lower(v.Name), "v4") or string.find(string.lower(v.Name), "awaken") or string.find(string.lower(v.Name), "race")) then
-                    if v:FindFirstChild("HumanoidRootPart") then
-                        Teleport(v.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
-                        wait(0.2)
-                        FireClick(v:FindFirstChildOfClass("ClickDetector"))
-                        for _, child in pairs(v:GetDescendants()) do
-                            if child:IsA("ClickDetector") then FireClick(child) end
-                        end
-                    end
                 end
             end
             wait(Settings.V4Delay)
@@ -408,12 +399,7 @@ local function StartFindLevi()
                     end
                 end
             end
-            
             if not found then
-                local boat = workspace:FindFirstChild("Boat") or workspace:FindFirstChild("Ship") or workspace:FindFirstChild("SeaBoat")
-                if boat and boat:FindFirstChild("HumanoidRootPart") then
-                    Teleport(boat.HumanoidRootPart.Position + Vector3.new(0, 5, 0))
-                end
                 wait(Settings.LeviSearchInterval)
             else
                 wait(30)
@@ -460,17 +446,6 @@ local function StartAutoRaid()
                 Teleport(npc.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
                 wait(0.3)
                 FireClick(npc:FindFirstChildOfClass("ClickDetector"))
-                for _, v in pairs(npc:GetDescendants()) do
-                    if v:IsA("ClickDetector") then FireClick(v) end
-                end
-            end
-            
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v:IsA("Model") and string.find(string.lower(v.Name), "chest") and v:FindFirstChild("HumanoidRootPart") then
-                    Teleport(v.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
-                    wait(0.2)
-                    FireClick(v:FindFirstChildOfClass("ClickDetector"))
-                end
             end
             wait(4)
         end
@@ -490,9 +465,6 @@ local function StartAutoChest()
                         Teleport(v.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
                         wait(0.15)
                         FireClick(v:FindFirstChildOfClass("ClickDetector"))
-                        for _, child in pairs(v:GetDescendants()) do
-                            if child:IsA("ClickDetector") then FireClick(child) end
-                        end
                     end
                 end
             end
@@ -533,99 +505,11 @@ local function StartAutoFruit()
                     if root then
                         Teleport(root.Position + Vector3.new(0, 2, 0))
                         wait(0.3)
-                        local click = v:FindFirstChildOfClass("ClickDetector")
-                        if click then FireClick(click) end
+                        FireClick(v:FindFirstChildOfClass("ClickDetector"))
                     end
                 end
             end
             wait(Settings.FruitDelay)
-        end
-    end)
-end
-
-local function StartAutoDungeon()
-    if State.AutoDungeon then return end
-    State.AutoDungeon = true
-    Notify("🏰 Auto Dungeon Started")
-    
-    Threads.AutoDungeon = task.spawn(function()
-        while State.AutoDungeon do
-            local dungeonNPC = workspace:FindFirstChild("DungeonNPC") or workspace:FindFirstChild("Dungeon")
-            if dungeonNPC and dungeonNPC:FindFirstChild("HumanoidRootPart") then
-                Teleport(dungeonNPC.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
-                wait(0.3)
-                FireClick(dungeonNPC:FindFirstChildOfClass("ClickDetector"))
-            end
-            
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v:IsA("Model") and (string.find(string.lower(v.Name), "dungeon") or string.find(string.lower(v.Name), "portal")) then
-                    if v:FindFirstChild("HumanoidRootPart") then
-                        Teleport(v.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
-                        FireClick(v:FindFirstChildOfClass("ClickDetector"))
-                    end
-                end
-            end
-            wait(3)
-        end
-    end)
-end
-
-local function StartAutoAwaken()
-    if State.AutoAwaken then return end
-    State.AutoAwaken = true
-    Notify("💫 Auto Awaken Started")
-    
-    Threads.AutoAwaken = task.spawn(function()
-        while State.AutoAwaken do
-            local awakenNPC = workspace:FindFirstChild("AwakeningNPC") or workspace:FindFirstChild("Awaken")
-            if awakenNPC and awakenNPC:FindFirstChild("HumanoidRootPart") then
-                Teleport(awakenNPC.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
-                wait(0.3)
-                FireClick(awakenNPC:FindFirstChildOfClass("ClickDetector"))
-            end
-            wait(2)
-        end
-    end)
-end
-
-local function StartAutoQuest()
-    if State.AutoQuest then return end
-    State.AutoQuest = true
-    Notify("📜 Auto Quest Started")
-    
-    Threads.AutoQuest = task.spawn(function()
-        while State.AutoQuest do
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v:IsA("Model") and (string.find(string.lower(v.Name), "quest") or string.find(string.lower(v.Name), "npc")) then
-                    if v:FindFirstChild("HumanoidRootPart") then
-                        Teleport(v.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
-                        wait(0.2)
-                        FireClick(v:FindFirstChildOfClass("ClickDetector"))
-                    end
-                end
-            end
-            wait(2)
-        end
-    end)
-end
-
-local function StartAutoCollect()
-    if State.AutoCollect then return end
-    State.AutoCollect = true
-    Notify("🔄 Auto Collect Started")
-    
-    Threads.AutoCollect = task.spawn(function()
-        while State.AutoCollect do
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v:IsA("Model") and (string.find(string.lower(v.Name), "drop") or string.find(string.lower(v.Name), "loot") or string.find(string.lower(v.Name), "item")) then
-                    local root = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChildWhichIsA("BasePart")
-                    if root then
-                        Teleport(root.Position + Vector3.new(0, 2, 0))
-                        wait(0.1)
-                    end
-                end
-            end
-            wait(0.5)
         end
     end)
 end
@@ -656,7 +540,6 @@ local function StartAutoMastery()
             local target = GetNearestNPC(Settings.FarmRadius, true)
             if target then
                 AttackTarget(target)
-                wait(0.1)
             end
             wait(0.5)
         end
@@ -678,15 +561,13 @@ local Locations = {
     {"Ice", Vector3.new(2500, 20, -2500)},
     {"Dark Arena", Vector3.new(0, 0, 3000)},
     {"Volcano", Vector3.new(-1500, 50, -1500)},
-    {"Graveyard", Vector3.new(800, 20, -800)},
-    {"Factory", Vector3.new(0, 20, 2000)},
-    {"Cafe", Vector3.new(-100, 10, 100)}
+    {"Graveyard", Vector3.new(800, 20, -800)}
 }
 
 -- ===== MENU UI =====
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Parent = Player:WaitForChild("PlayerGui")
-ScreenGui.Name = "BananaMenuV2"
+ScreenGui.Name = "BananaMenu"
 
 -- ===== FLOATING BUTTON =====
 local FloatingButton = Instance.new("ImageButton")
@@ -711,8 +592,8 @@ FBstroke.Parent = FloatingButton
 
 -- ===== MAIN MENU =====
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 400, 0, 580)
-MainFrame.Position = UDim2.new(0.5, -200, 0.5, -290)
+MainFrame.Size = UDim2.new(0, 380, 0, 550)
+MainFrame.Position = UDim2.new(0.5, -190, 0.5, -275)
 MainFrame.BackgroundColor3 = Color3.new(0.05, 0.03, 0.08)
 MainFrame.BackgroundTransparency = 0.08
 MainFrame.BorderSizePixel = 0
@@ -729,9 +610,9 @@ MainStroke.Transparency = 0.3
 MainStroke.Thickness = 1.5
 MainStroke.Parent = MainFrame
 
--- ===== TITLE BAR =====
+-- ===== TITLE BAR WITH LEVEL & BELI =====
 local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 50)
+TitleBar.Size = UDim2.new(1, 0, 0, 55)
 TitleBar.BackgroundColor3 = Color3.new(0.1, 0.06, 0.02)
 TitleBar.BackgroundTransparency = 0.3
 TitleBar.BorderSizePixel = 0
@@ -741,10 +622,11 @@ local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 15)
 TitleCorner.Parent = TitleBar
 
+-- Title text
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(0.7, 0, 1, 0)
+TitleLabel.Size = UDim2.new(0.5, 0, 0.5, 0)
 TitleLabel.Position = UDim2.new(0.02, 0, 0, 0)
-TitleLabel.Text = "🍌 BANANA MENU V2"
+TitleLabel.Text = "🍌 BANANA MENU"
 TitleLabel.TextColor3 = Color3.new(1, 0.8, 0.1)
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.TextScaled = true
@@ -753,9 +635,9 @@ TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Parent = TitleBar
 
 local SubLabel = Instance.new("TextLabel")
-SubLabel.Size = UDim2.new(0.7, 0, 0.5, 0)
+SubLabel.Size = UDim2.new(0.5, 0, 0.4, 0)
 SubLabel.Position = UDim2.new(0.02, 0, 0.5, 0)
-SubLabel.Text = "Ultimate Mobile | Delta/VNG/Arceus"
+SubLabel.Text = "Mobile | Delta/VNG/Arceus"
 SubLabel.TextColor3 = Color3.new(0.5, 0.5, 0.5)
 SubLabel.BackgroundTransparency = 1
 SubLabel.TextScaled = true
@@ -763,6 +645,53 @@ SubLabel.Font = Enum.Font.Gotham
 SubLabel.TextXAlignment = Enum.TextXAlignment.Left
 SubLabel.Parent = TitleBar
 
+-- ===== LEVEL & BELI DISPLAY =====
+local LevelLabel = Instance.new("TextLabel")
+LevelLabel.Size = UDim2.new(0.3, 0, 0.5, 0)
+LevelLabel.Position = UDim2.new(0.7, 0, 0, 0)
+LevelLabel.Text = "Lv. " .. GetLevel()
+LevelLabel.TextColor3 = Color3.new(1, 0.8, 0.1)
+LevelLabel.BackgroundTransparency = 1
+LevelLabel.TextScaled = true
+LevelLabel.Font = Enum.Font.GothamBold
+LevelLabel.TextXAlignment = Enum.TextXAlignment.Right
+LevelLabel.Parent = TitleBar
+
+local BeliLabel = Instance.new("TextLabel")
+BeliLabel.Size = UDim2.new(0.3, 0, 0.4, 0)
+BeliLabel.Position = UDim2.new(0.7, 0, 0.5, 0)
+BeliLabel.Text = "$" .. GetBeli()
+BeliLabel.TextColor3 = Color3.new(0.3, 1, 0.3)
+BeliLabel.BackgroundTransparency = 1
+BeliLabel.TextScaled = true
+BeliLabel.Font = Enum.Font.Gotham
+BeliLabel.TextXAlignment = Enum.TextXAlignment.Right
+BeliLabel.Parent = TitleBar
+
+-- Update stats
+local function UpdateStats()
+    LevelLabel.Text = "Lv. " .. GetLevel()
+    BeliLabel.Text = "$" .. GetBeli()
+end
+
+pcall(function()
+    if Player:FindFirstChild("leaderstats") then
+        for _, v in pairs(Player.leaderstats:GetChildren()) do
+            if v:IsA("IntValue") then
+                v:GetPropertyChangedSignal("Value"):Connect(UpdateStats)
+            end
+        end
+    end
+    if Player:FindFirstChild("Data") then
+        for _, v in pairs(Player.Data:GetChildren()) do
+            if v:IsA("IntValue") then
+                v:GetPropertyChangedSignal("Value"):Connect(UpdateStats)
+            end
+        end
+    end
+end)
+
+-- Close button
 local CloseBtn = Instance.new("ImageButton")
 CloseBtn.Size = UDim2.new(0, 30, 0, 30)
 CloseBtn.Position = UDim2.new(0.94, 0, 0.1, 0)
@@ -773,65 +702,13 @@ CloseBtn.Parent = TitleBar
 
 CloseBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = false
-    MenuVisible = false
+    State.MenuVisible = false
 end)
-
--- ===== TAB SYSTEM =====
-local TabFrame = Instance.new("Frame")
-TabFrame.Size = UDim2.new(1, -10, 0, 35)
-TabFrame.Position = UDim2.new(0, 5, 0, 52)
-TabFrame.BackgroundTransparency = 1
-TabFrame.Parent = MainFrame
-
-local Tabs = {"Combat", "Progress", "Special", "Movement", "Utility"}
-local CurrentTab = "Combat"
-
-local function CreateTabButton(text, pos)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.18, 0, 1, 0)
-    btn.Position = UDim2.new(pos, 0, 0, 0)
-    btn.Text = text
-    btn.TextColor3 = Color3.new(0.7, 0.7, 0.7)
-    btn.BackgroundColor3 = Color3.new(0.1, 0.06, 0.02)
-    btn.BackgroundTransparency = 0.5
-    btn.BorderSizePixel = 0
-    btn.TextScaled = true
-    btn.Font = Enum.Font.GothamBold
-    btn.Parent = TabFrame
-    
-    local cr = Instance.new("UICorner")
-    cr.CornerRadius = UDim.new(0, 8)
-    cr.Parent = btn
-    
-    btn.MouseButton1Click:Connect(function()
-        CurrentTab = text
-        for _, child in pairs(TabFrame:GetChildren()) do
-            if child:IsA("TextButton") then
-                child.TextColor3 = Color3.new(0.7, 0.7, 0.7)
-                child.BackgroundColor3 = Color3.new(0.1, 0.06, 0.02)
-            end
-        end
-        btn.TextColor3 = Color3.new(1, 0.8, 0.1)
-        btn.BackgroundColor3 = Color3.new(0.2, 0.1, 0.05)
-        UpdateContent()
-    end)
-    
-    if text == "Combat" then
-        btn.TextColor3 = Color3.new(1, 0.8, 0.1)
-        btn.BackgroundColor3 = Color3.new(0.2, 0.1, 0.05)
-    end
-    
-    return btn
-end
-
-for i, tab in pairs(Tabs) do
-    CreateTabButton(tab, 0.02 + (i - 1) * 0.2)
-end
 
 -- ===== CONTENT FRAME =====
 local ContentFrame = Instance.new("ScrollingFrame")
-ContentFrame.Size = UDim2.new(1, -10, 1, -100)
-ContentFrame.Position = UDim2.new(0, 5, 0, 92)
+ContentFrame.Size = UDim2.new(1, -10, 1, -70)
+ContentFrame.Position = UDim2.new(0, 5, 0, 62)
 ContentFrame.BackgroundTransparency = 1
 ContentFrame.CanvasSize = UDim2.new(0, 0, 0, 1000)
 ContentFrame.ScrollBarThickness = 3
@@ -849,18 +726,6 @@ local function ClearContent()
             child:Destroy()
         end
     end
-end
-
-local function CreateSection(text)
-    local section = Instance.new("TextLabel")
-    section.Size = UDim2.new(1, -10, 0, 28)
-    section.Text = "─── " .. text .. " ───"
-    section.TextColor3 = Color3.new(1, 0.8, 0.1)
-    section.BackgroundTransparency = 1
-    section.TextScaled = true
-    section.Font = Enum.Font.GothamBold
-    section.Parent = ContentFrame
-    return section
 end
 
 local function CreateButton(text, cb)
@@ -928,99 +793,131 @@ local function CreateToggle(text, stateVar, cb)
     return toggle
 end
 
--- ===== UPDATE CONTENT =====
-local function UpdateContent()
+-- ===== BUILD CONTENT =====
+local function BuildContent()
     ClearContent()
     
-    if CurrentTab == "Combat" then
-        CreateSection("⚔️ COMBAT")
-        CreateToggle("ESP", State.ESP, function(v) ToggleESP(v) end)
-        CreateToggle("Kill Aura", State.KillAura, function(v) State.KillAura = v; Notify(v and "Kill Aura ON" or "Kill Aura OFF") end)
-        CreateToggle("Aimbot", State.Aimbot, function(v) State.Aimbot = v; Notify(v and "Aimbot ON" or "Aimbot OFF") end)
-        CreateToggle("Auto Farm", State.AutoFarm, function(v) if v then StartAutoFarm() else State.AutoFarm = false; Notify("Farm Stopped") end end)
-        CreateToggle("Auto Bounty", State.AutoBounty, function(v) if v then StartAutoBounty() else State.AutoBounty = false; Notify("Bounty Stopped") end end)
-        CreateToggle("Auto Raid", State.AutoRaid, function(v) if v then StartAutoRaid() else State.AutoRaid = false; Notify("Raid Stopped") end end)
-        CreateToggle("Auto Sea Beast", State.AutoSeaBeast, function(v) if v then StartAutoSeaBeast() else State.AutoSeaBeast = false; Notify("Sea Beast Stopped") end end)
-        CreateToggle("Auto Boss Hunt", State.AutoBoss, function(v) if v then StartAutoBoss() else State.AutoBoss = false; Notify("Boss Hunt Stopped") end end)
-        
-    elseif CurrentTab == "Progress" then
-        CreateSection("📈 PROGRESS")
-        CreateToggle("Auto V4", State.AutoV4, function(v) if v then StartAutoV4() else State.AutoV4 = false; Notify("V4 Stopped") end end)
-        CreateToggle("Auto Awaken", State.AutoAwaken, function(v) if v then StartAutoAwaken() else State.AutoAwaken = false; Notify("Awaken Stopped") end end)
-        CreateToggle("Auto Mastery", State.AutoMastery, function(v) if v then StartAutoMastery() else State.AutoMastery = false; Notify("Mastery Stopped") end end)
-        CreateToggle("Auto Level", State.AutoLevel, function(v) State.AutoLevel = v; Notify(v and "Auto Level ON" or "Auto Level OFF") end)
-        CreateToggle("Auto Stats", State.AutoStats, function(v) State.AutoStats = v; Notify(v and "Auto Stats ON" or "Auto Stats OFF") end)
-        CreateToggle("Auto Quest", State.AutoQuest, function(v) if v then StartAutoQuest() else State.AutoQuest = false; Notify("Quest Stopped") end end)
-        CreateToggle("Auto Dungeon", State.AutoDungeon, function(v) if v then StartAutoDungeon() else State.AutoDungeon = false; Notify("Dungeon Stopped") end end)
-        
-    elseif CurrentTab == "Special" then
-        CreateSection("🔍 SPECIAL")
-        CreateToggle("Find Leviathan", State.FindLevi, function(v) if v then StartFindLevi() else State.FindLevi = false; Notify("Levi Search Stopped") end end)
-        CreateToggle("Auto Fruit", State.AutoFruit, function(v) if v then StartAutoFruit() else State.AutoFruit = false; Notify("Fruit Stopped") end end)
-        CreateToggle("Auto Chest", State.AutoChest, function(v) if v then StartAutoChest() else State.AutoChest = false; Notify("Chest Stopped") end end)
-        CreateToggle("Auto Collect", State.AutoCollect, function(v) if v then StartAutoCollect() else State.AutoCollect = false; Notify("Collect Stopped") end end)
-        CreateToggle("Auto Stock", State.AutoStock, function(v) State.AutoStock = v; Notify(v and "Auto Stock ON" or "Auto Stock OFF") end)
-        CreateToggle("Auto Hatch", State.AutoHatch, function(v) State.AutoHatch = v; Notify(v and "Auto Hatch ON" or "Auto Hatch OFF") end)
-        CreateToggle("Auto Fishing", State.AutoFishing, function(v) State.AutoFishing = v; Notify(v and "Auto Fishing ON" or "Auto Fishing OFF") end)
-        
-    elseif CurrentTab == "Movement" then
-        CreateSection("🕹️ MOVEMENT")
-        CreateToggle("Fly", State.Fly, function(v) ToggleFly(v) end)
-        CreateToggle("Speed", State.Speed, function(v) ToggleSpeed(v) end)
-        CreateToggle("Infinite Jump", State.InfiniteJump, function(v) ToggleInfiniteJump(v) end)
-        CreateToggle("No Clip", State.NoClip, function(v) ToggleNoClip(v) end)
-        CreateToggle("Water Walk", State.WaterWalk, function(v) ToggleWaterWalk(v) end)
-        CreateToggle("No Fall", State.NoFall, function(v) ToggleNoFall(v) end)
-        
-        CreateSection("📍 TELEPORT")
-        for _, loc in pairs(Locations) do
-            CreateButton("TP " .. loc[1], function()
-                Teleport(loc[2])
-                Notify("TP to " .. loc[1])
-            end)
-        end
-        CreateButton("Custom TP", function()
-            local x = tonumber(game:GetService("StarterGui"):SetCore("Prompt", {Title = "X", Text = "Enter X"})) or 0
-            local y = tonumber(game:GetService("StarterGui"):SetCore("Prompt", {Title = "Y", Text = "Enter Y"})) or 0
-            local z = tonumber(game:GetService("StarterGui"):SetCore("Prompt", {Title = "Z", Text = "Enter Z"})) or 0
-            Teleport(Vector3.new(x, y, z))
-            Notify("TP to custom position")
-        end)
-        
-    elseif CurrentTab == "Utility" then
-        CreateSection("🛠️ UTILITY")
-        CreateToggle("Auto Heal", State.AutoHeal, function(v) State.AutoHeal = v; Notify(v and "Auto Heal ON" or "Auto Heal OFF") end)
-        CreateToggle("Auto Buff", State.AutoBuff, function(v) State.AutoBuff = v; Notify(v and "Auto Buff ON" or "Auto Buff OFF") end)
-        CreateToggle("Anti Stun", State.AntiStun, function(v) State.AntiStun = v; Notify(v and "Anti Stun ON" or "Anti Stun OFF") end)
-        CreateToggle("Anti AFK", State.AntiAFK, function(v) State.AntiAFK = v; Notify(v and "Anti AFK ON" or "Anti AFK OFF") end)
-        CreateToggle("Anti Ban", State.AntiBan, function(v) State.AntiBan = v; Notify(v and "Anti Ban ON" or "Anti Ban OFF") end)
-        CreateToggle("Anti Lag", State.AntiLag, function(v) State.AntiLag = v; Notify(v and "Anti Lag ON" or "Anti Lag OFF") end)
-        CreateToggle("Auto Rejoin", State.AutoRejoin, function(v) State.AutoRejoin = v; Notify(v and "Auto Rejoin ON" or "Auto Rejoin OFF") end)
-        
-        CreateSection("⚙️ CONTROLS")
-        CreateButton("Refresh Character", function() Player:LoadCharacter(); Notify("Refreshed") end)
-        CreateButton("Rejoin Server", function() game:GetService("TeleportService"):Teleport(game.PlaceId, Player) end)
-        CreateButton("Set GUI Keybind", function()
-            local key = UserInputService:GetLastInput().KeyCode.Name
-            Keybinds[key] = function()
-                MainFrame.Visible = not MainFrame.Visible
-                MenuVisible = MainFrame.Visible
-            end
-            Notify("Keybind set to " .. key)
-        end)
-        CreateButton("Hide GUI", function()
-            MainFrame.Visible = false
-            MenuVisible = false
+    -- Combat
+    local c1 = Instance.new("TextLabel")
+    c1.Size = UDim2.new(1, -10, 0, 28)
+    c1.Text = "─── COMBAT ───"
+    c1.TextColor3 = Color3.new(1, 0.8, 0.1)
+    c1.BackgroundTransparency = 1
+    c1.TextScaled = true
+    c1.Font = Enum.Font.GothamBold
+    c1.Parent = ContentFrame
+    
+    CreateToggle("ESP", State.ESP, function(v) ToggleESP(v) end)
+    CreateToggle("Kill Aura", State.KillAura, function(v) State.KillAura = v; Notify(v and "Kill Aura ON" or "Kill Aura OFF") end)
+    CreateToggle("Auto Farm", State.AutoFarm, function(v) if v then StartAutoFarm() else State.AutoFarm = false; Notify("Farm Stopped") end end)
+    CreateToggle("Auto Bounty", State.AutoBounty, function(v) if v then StartAutoBounty() else State.AutoBounty = false; Notify("Bounty Stopped") end end)
+    CreateToggle("Auto Raid", State.AutoRaid, function(v) if v then StartAutoRaid() else State.AutoRaid = false; Notify("Raid Stopped") end end)
+    CreateToggle("Auto Sea Beast", State.AutoSeaBeast, function(v) if v then StartAutoSeaBeast() else State.AutoSeaBeast = false; Notify("Sea Beast Stopped") end end)
+    CreateToggle("Auto Boss Hunt", State.AutoBoss, function(v) if v then StartAutoBoss() else State.AutoBoss = false; Notify("Boss Hunt Stopped") end end)
+    
+    -- Progress
+    local p1 = Instance.new("TextLabel")
+    p1.Size = UDim2.new(1, -10, 0, 28)
+    p1.Text = "─── PROGRESS ───"
+    p1.TextColor3 = Color3.new(1, 0.8, 0.1)
+    p1.BackgroundTransparency = 1
+    p1.TextScaled = true
+    p1.Font = Enum.Font.GothamBold
+    p1.Parent = ContentFrame
+    
+    CreateToggle("Auto V4", State.AutoV4, function(v) if v then StartAutoV4() else State.AutoV4 = false; Notify("V4 Stopped") end end)
+    CreateToggle("Auto Awaken", State.AutoAwaken, function(v) if v then StartAutoAwaken() else State.AutoAwaken = false; Notify("Awaken Stopped") end end)
+    CreateToggle("Auto Mastery", State.AutoMastery, function(v) if v then StartAutoMastery() else State.AutoMastery = false; Notify("Mastery Stopped") end end)
+    CreateToggle("Auto Quest", State.AutoQuest, function(v) if v then StartAutoQuest() else State.AutoQuest = false; Notify("Quest Stopped") end end)
+    
+    -- Special
+    local s1 = Instance.new("TextLabel")
+    s1.Size = UDim2.new(1, -10, 0, 28)
+    s1.Text = "─── SPECIAL ───"
+    s1.TextColor3 = Color3.new(1, 0.8, 0.1)
+    s1.BackgroundTransparency = 1
+    s1.TextScaled = true
+    s1.Font = Enum.Font.GothamBold
+    s1.Parent = ContentFrame
+    
+    CreateToggle("Find Leviathan", State.FindLevi, function(v) if v then StartFindLevi() else State.FindLevi = false; Notify("Levi Search Stopped") end end)
+    CreateToggle("Auto Fruit", State.AutoFruit, function(v) if v then StartAutoFruit() else State.AutoFruit = false; Notify("Fruit Stopped") end end)
+    CreateToggle("Auto Chest", State.AutoChest, function(v) if v then StartAutoChest() else State.AutoChest = false; Notify("Chest Stopped") end end)
+    CreateToggle("Auto Collect", State.AutoCollect, function(v) if v then StartAutoCollect() else State.AutoCollect = false; Notify("Collect Stopped") end end)
+    
+    -- Movement
+    local m1 = Instance.new("TextLabel")
+    m1.Size = UDim2.new(1, -10, 0, 28)
+    m1.Text = "─── MOVEMENT ───"
+    m1.TextColor3 = Color3.new(1, 0.8, 0.1)
+    m1.BackgroundTransparency = 1
+    m1.TextScaled = true
+    m1.Font = Enum.Font.GothamBold
+    m1.Parent = ContentFrame
+    
+    CreateToggle("Fly", State.Fly, function(v) ToggleFly(v) end)
+    CreateToggle("Speed", State.Speed, function(v) ToggleSpeed(v) end)
+    CreateToggle("Infinite Jump", State.InfiniteJump, function(v) ToggleInfiniteJump(v) end)
+    CreateToggle("No Clip", State.NoClip, function(v) ToggleNoClip(v) end)
+    CreateToggle("Water Walk", State.WaterWalk, function(v) ToggleWaterWalk(v) end)
+    CreateToggle("No Fall", State.NoFall, function(v) ToggleNoFall(v) end)
+    
+    -- Teleport
+    local t1 = Instance.new("TextLabel")
+    t1.Size = UDim2.new(1, -10, 0, 28)
+    t1.Text = "─── TELEPORT ───"
+    t1.TextColor3 = Color3.new(1, 0.8, 0.1)
+    t1.BackgroundTransparency = 1
+    t1.TextScaled = true
+    t1.Font = Enum.Font.GothamBold
+    t1.Parent = ContentFrame
+    
+    for _, loc in pairs(Locations) do
+        CreateButton("TP " .. loc[1], function()
+            Teleport(loc[2])
+            Notify("TP to " .. loc[1])
         end)
     end
+    
+    CreateButton("Custom TP", function()
+        local x = tonumber(game:GetService("StarterGui"):SetCore("Prompt", {Title = "X", Text = "Enter X"})) or 0
+        local y = tonumber(game:GetService("StarterGui"):SetCore("Prompt", {Title = "Y", Text = "Enter Y"})) or 0
+        local z = tonumber(game:GetService("StarterGui"):SetCore("Prompt", {Title = "Z", Text = "Enter Z"})) or 0
+        Teleport(Vector3.new(x, y, z))
+        Notify("TP to custom position")
+    end)
+    
+    -- Utility
+    local u1 = Instance.new("TextLabel")
+    u1.Size = UDim2.new(1, -10, 0, 28)
+    u1.Text = "─── UTILITY ───"
+    u1.TextColor3 = Color3.new(1, 0.8, 0.1)
+    u1.BackgroundTransparency = 1
+    u1.TextScaled = true
+    u1.Font = Enum.Font.GothamBold
+    u1.Parent = ContentFrame
+    
+    CreateToggle("Auto Heal", State.AutoHeal, function(v) State.AutoHeal = v; Notify(v and "Auto Heal ON" or "Auto Heal OFF") end)
+    CreateToggle("Anti AFK", State.AntiAFK, function(v) State.AntiAFK = v; Notify(v and "Anti AFK ON" or "Anti AFK OFF") end)
+    CreateToggle("Auto Rejoin", State.AutoRejoin, function(v) State.AutoRejoin = v; Notify(v and "Auto Rejoin ON" or "Auto Rejoin OFF") end)
+    
+    CreateButton("Refresh Character", function() Player:LoadCharacter(); Notify("Refreshed") end)
+    CreateButton("Rejoin Server", function() game:GetService("TeleportService"):Teleport(game.PlaceId, Player) end)
+    CreateButton("Hide Menu", function()
+        MainFrame.Visible = false
+        State.MenuVisible = false
+    end)
 end
 
--- ===== FLOATING BUTTON DRAG =====
+BuildContent()
+
+-- ===== FLOATING BUTTON TOGGLE =====
 FloatingButton.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
-    MenuVisible = MainFrame.Visible
+    State.MenuVisible = MainFrame.Visible
 end)
 
+-- ===== FLOATING BUTTON DRAG =====
 FloatingButton.MouseButton1Down:Connect(function()
     Dragging = true
     DragStart = Vector2.new(UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y)
@@ -1044,7 +941,7 @@ UserInputService.InputChanged:Connect(function(input)
     FloatingButton.Position = UDim2.new(0, newX, 0, newY)
 end)
 
--- ===== KEYBIND LISTENER =====
+-- ===== KEYBIND =====
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     local key = input.KeyCode.Name
@@ -1053,7 +950,7 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- ===== INFINITE JUMP LOOP =====
+-- ===== INFINITE JUMP =====
 RunService.Heartbeat:Connect(function()
     if State.InfiniteJump and Humanoid then
         Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -1114,6 +1011,6 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ===== INIT =====
-UpdateContent()
-Notify("🍌 Banana Menu V2 Loaded!", 4)
-print("[BANANA MENU V2] Loaded successfully!")
+Notify("🍌 Banana Menu Loaded!", 4)
+print("[BANANA MENU] Loaded successfully!")
+```
